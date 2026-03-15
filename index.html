@@ -1,1 +1,252 @@
-<!doctype html><html><head><meta charset='utf-8'><title>Snailman v0</title><style>body{background:#0b1020;color:#eaf0ff;font-family:system-ui;text-align:center}canvas{background:#111a2b;border:2px solid #2d3f66;image-rendering:pixelated}</style></head><body><h2>🌀 Snailman v0</h2><canvas id='c' width='560' height='560'></canvas><p id='h'></p><p>Arrows/WASD to move • R to restart</p><script>const c=document.getElementById('c'),x=c.getContext('2d'),h=document.getElementById('h');const N=20,S=28,w=new Set();for(let i=0;i<N;i++){w.add(`${i},0`);w.add(`${i},${N-1}`);w.add(`0,${i}`);w.add(`${N-1},${i}`)}for(let i=3;i<17;i++)if(i!==10)w.add(`10,${i}`);let p={x:2,y:2,d:{x:1,y:0}},e={x:17,y:17},score=0,over=0,win=0;let dots=new Set();for(let y=1;y<N-1;y++)for(let x0=1;x0<N-1;x0++)if(!w.has(`${x0},${y}`))dots.add(`${x0},${y}`);addEventListener('keydown',k=>{k=k.key.toLowerCase();if(k=='arrowup'||k=='w')p.d={x:0,y:-1};if(k=='arrowdown'||k=='s')p.d={x:0,y:1};if(k=='arrowleft'||k=='a')p.d={x:-1,y:0};if(k=='arrowright'||k=='d')p.d={x:1,y:0};if(k=='r'&&(over||win))location.reload()});const mv=(o,d)=>{let nx=o.x+d.x,ny=o.y+d.y;if(!w.has(`${nx},${ny}`)){o.x=nx;o.y=ny}};function ai(){let ds=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].filter(d=>!w.has(`${e.x+d.x},${e.y+d.y}`));ds.sort((a,b)=>(Math.abs(e.x+a.x-p.x)+Math.abs(e.y+a.y-p.y))-(Math.abs(e.x+b.x-p.x)+Math.abs(e.y+b.y-p.y)));mv(e,Math.random()<.75?ds[0]:ds[(Math.random()*ds.length)|0])}function draw(){x.clearRect(0,0,560,560);for(const z of w){let[a,b]=z.split(',').map(Number);x.fillStyle='#2b3f6d';x.fillRect(a*S,b*S,S,S)}for(const d of dots){let[a,b]=d.split(',').map(Number);x.fillStyle='#ffd86b';x.beginPath();x.arc(a*S+14,b*S+14,3,0,7);x.fill()}x.fillStyle='#7df0d5';x.fillRect(p.x*S,p.y*S,S,S);x.fillStyle='#ff6f6f';x.fillRect(e.x*S,e.y*S,S,S);h.textContent=(win?'You win! ':over?'Game over! ':'')+`Score ${score} • left ${dots.size}`+(win||over?' • press R':'')}function tick(){if(over||win)return draw();mv(p,p.d);let k=`${p.x},${p.y}`;if(dots.has(k)){dots.delete(k);score++}ai();if(p.x==e.x&&p.y==e.y)over=1;if(dots.size==0)win=1;draw()}setInterval(tick,170);draw();</script></body></html>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Snailman v0</title>
+  <style>
+    body { background:#0b1020; color:#eaf0ff; font-family:system-ui; text-align:center; }
+    canvas { background:#111a2b; border:2px solid #2d3f66; image-rendering:pixelated; }
+  </style>
+</head>
+<body>
+  <h2>🌀 Snailman v0</h2>
+  <canvas id="c" width="560" height="560"></canvas>
+  <p id="h"></p>
+  <p>Arrows/WASD to move • R to restart</p>
+
+<script>
+const c = document.getElementById('c');
+const x = c.getContext('2d');
+const h = document.getElementById('h');
+
+const N = 20, S = 28;
+const walls = new Set();
+
+for (let i=0;i<N;i++) {
+  walls.add(`${i},0`); walls.add(`${i},${N-1}`);
+  walls.add(`0,${i}`); walls.add(`${N-1},${i}`);
+}
+for (let i=3;i<17;i++) if (i!==10) walls.add(`10,${i}`);
+
+let p = { x:2, y:2, d:{x:1,y:0} };   // player (snail)
+let e = { x:17, y:17 };              // enemy (salt shaker)
+let score = 0, over = 0, win = 0;
+let combo = 0, tickCount = 0, lastEatTick = -999;
+let slimeTrail = [];     // {x,y,life}
+let saltParticles = [];  // {x,y,vx,vy,life}
+
+let dots = new Set();
+for (let y=1;y<N-1;y++) {
+  for (let x0=1;x0<N-1;x0++) {
+    if (!walls.has(`${x0},${y}`)) dots.add(`${x0},${y}`);
+  }
+}
+
+addEventListener('keydown', (k) => {
+  k = k.key.toLowerCase();
+  if (k==='arrowup' || k==='w') p.d = {x:0,y:-1};
+  if (k==='arrowdown' || k==='s') p.d = {x:0,y:1};
+  if (k==='arrowleft' || k==='a') p.d = {x:-1,y:0};
+  if (k==='arrowright' || k==='d') p.d = {x:1,y:0};
+  if (k==='r' && (over || win)) location.reload();
+});
+
+const move = (o,d) => {
+  const nx = o.x + d.x, ny = o.y + d.y;
+  if (!walls.has(`${nx},${ny}`)) { o.x = nx; o.y = ny; return true; }
+  return false;
+};
+
+function ai() {
+  let ds = [
+    {x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}
+  ].filter(d => !walls.has(`${e.x+d.x},${e.y+d.y}`));
+
+  ds.sort((a,b) =>
+    (Math.abs(e.x+a.x-p.x)+Math.abs(e.y+a.y-p.y)) -
+    (Math.abs(e.x+b.x-p.x)+Math.abs(e.y+b.y-p.y))
+  );
+
+  const moved = move(e, Math.random()<0.75 ? ds[0] : ds[(Math.random()*ds.length)|0]);
+  if (moved) {
+    const cx = e.x * S + S * 0.5;
+    const cy = e.y * S + S * 0.45;
+    for (let i=0;i<4;i++) {
+      saltParticles.push({
+        x: cx + (Math.random()*6-3),
+        y: cy + (Math.random()*4-2),
+        vx: (Math.random()*0.9-0.45),
+        vy: -(Math.random()*0.9+0.2),
+        life: 12 + ((Math.random()*8)|0)
+      });
+    }
+  }
+}
+
+function updateFx() {
+  slimeTrail = slimeTrail
+    .map(s => ({...s, life: s.life - 1}))
+    .filter(s => s.life > 0);
+
+  saltParticles = saltParticles
+    .map(p0 => ({ ...p0, x: p0.x + p0.vx, y: p0.y + p0.vy, vy: p0.vy + 0.03, life: p0.life - 1 }))
+    .filter(p0 => p0.life > 0);
+}
+
+function drawFx() {
+  for (const s of slimeTrail) {
+    const a = Math.max(0, s.life / 22);
+    x.fillStyle = `rgba(125,240,213,${(0.10*a).toFixed(3)})`;
+    x.beginPath();
+    x.ellipse(s.x, s.y, 8, 5, 0, 0, Math.PI*2);
+    x.fill();
+  }
+
+  for (const p0 of saltParticles) {
+    const a = Math.max(0, p0.life / 20);
+    x.fillStyle = `rgba(255,245,245,${(0.75*a).toFixed(3)})`;
+    x.fillRect(p0.x, p0.y, 2, 2);
+  }
+}
+
+function px(x0, y0, c0, u=2) { x.fillStyle = c0; x.fillRect(x0, y0, u, u); }
+
+function drawSnail(cx, cy) {
+  const t = Math.floor(Date.now() / 240) % 2; // tiny idle animation
+  const u = 2;
+  const ox = Math.floor(cx + 5);
+  const oy = Math.floor(cy + 6);
+
+  // shadow
+  x.fillStyle = 'rgba(0,0,0,0.25)';
+  x.fillRect(cx + 4, cy + 22, 20, 4);
+
+  // shell (pixel blocks)
+  const shell = '#46b0ff', shellDark = '#2a79c8', shellHi = '#9dd9ff';
+  const shellPts = [
+    [5,4],[6,4],[7,4],[8,4],
+    [4,5],[5,5],[6,5],[7,5],[8,5],[9,5],
+    [4,6],[5,6],[6,6],[7,6],[8,6],[9,6],
+    [4,7],[5,7],[6,7],[7,7],[8,7],[9,7],
+    [5,8],[6,8],[7,8],[8,8]
+  ];
+  for (const [sx,sy] of shellPts) px(ox+sx*u, oy+sy*u, shell, u);
+  for (const [sx,sy] of [[5,5],[6,5],[5,6],[6,6]]) px(ox+sx*u, oy+sy*u, shellHi, u);
+  for (const [sx,sy] of [[8,7],[9,7],[8,6],[9,6],[8,8]]) px(ox+sx*u, oy+sy*u, shellDark, u);
+
+  // shell spiral
+  for (const [sx,sy] of [[7,6],[7,7],[6,7],[6,6]]) px(ox+sx*u, oy+sy*u, shellDark, u);
+
+  // body
+  const body = '#86f6db', bodyDark = '#55c9b1';
+  for (const [bx,by] of [[8,9],[9,9],[10,9],[11,9],[12,9],[13,9],[14,9],[15,9],[16,9],[17,9],[18,9],[19,9],[20,9],[21,9],[9,10],[10,10],[11,10],[12,10],[13,10],[14,10],[15,10],[16,10],[17,10],[18,10],[19,10],[20,10]]) px(ox+bx*u, oy+by*u, body, u);
+  for (const [bx,by] of [[8,10],[9,10],[10,10],[20,10]]) px(ox+bx*u, oy+by*u, bodyDark, u);
+
+  // head + eye stalks (wiggle)
+  const wig = t ? 0 : 1;
+  for (const [hx,hy] of [[21,8],[22,8],[21,9],[22,9]]) px(ox+hx*u, oy+hy*u, body, u);
+  px(ox+22*u, oy+(6+wig)*u, body, u);
+  px(ox+20*u, oy+(6+(1-wig))*u, body, u);
+  px(ox+22*u, oy+(5+wig)*u, '#0b1020', u);
+  px(ox+20*u, oy+(5+(1-wig))*u, '#0b1020', u);
+}
+
+function drawSaltShaker(cx, cy) {
+  const t = Math.floor(Date.now() / 180) % 2;
+  const u = 2;
+  const ox = Math.floor(cx + (t ? 4 : 5)); // tiny shake
+  const oy = Math.floor(cy + 5);
+
+  // shadow
+  x.fillStyle = 'rgba(0,0,0,0.25)';
+  x.fillRect(cx + 5, cy + 22, 18, 4);
+
+  const red = '#ff6f6f', redDark = '#c85050', redHi = '#ffb2b2';
+  // body
+  for (let yy=6; yy<=13; yy++) {
+    for (let xx=7; xx<=14; xx++) {
+      px(ox+xx*u, oy+yy*u, red, u);
+    }
+  }
+  // outline/shading
+  for (let yy=6; yy<=13; yy++) px(ox+14*u, oy+yy*u, redDark, u);
+  for (let xx=7; xx<=14; xx++) px(ox+xx*u, oy+13*u, redDark, u);
+  for (let xx=7; xx<=13; xx++) px(ox+xx*u, oy+6*u, redHi, u);
+
+  // cap
+  for (let yy=3; yy<=5; yy++) for (let xx=8; xx<=13; xx++) px(ox+xx*u, oy+yy*u, redDark, u);
+  for (const [hx,hy] of [[9,4],[10,4],[11,4],[12,4]]) px(ox+hx*u, oy+hy*u, '#ffdede', u);
+  for (const [hx,hy] of [[9,3],[11,3]]) px(ox+hx*u, oy+hy*u, '#fff4f4', u);
+
+  // salt label
+  for (let xx=8; xx<=13; xx++) px(ox+xx*u, oy+9*u, '#ffd4d4', u);
+}
+
+function draw() {
+  x.clearRect(0,0,560,560);
+
+  for (const z of walls) {
+    const [a,b] = z.split(',').map(Number);
+    x.fillStyle = '#2b3f6d';
+    x.fillRect(a*S, b*S, S, S);
+  }
+
+  for (const d of dots) {
+    const [a,b] = d.split(',').map(Number);
+    x.fillStyle = '#ffd86b';
+    x.beginPath();
+    x.arc(a*S + 14, b*S + 14, 3, 0, 7);
+    x.fill();
+  }
+
+  drawFx();
+  drawSnail(p.x*S, p.y*S);
+  drawSaltShaker(e.x*S, e.y*S);
+
+  const comboText = combo > 1 ? ` • combo x${combo}` : '';
+  h.textContent =
+    (win ? 'You win! ' : over ? 'Game over! ' : '') +
+    `Score ${score} • left ${dots.size}${comboText}` +
+    (win || over ? ' • press R' : '');
+}
+
+function tick() {
+  tickCount++;
+  if (over || win) {
+    updateFx();
+    return draw();
+  }
+
+  const moved = move(p, p.d);
+  if (moved) {
+    slimeTrail.push({
+      x: p.x * S + S * 0.35,
+      y: p.y * S + S * 0.8,
+      life: 22
+    });
+    if (slimeTrail.length > 80) slimeTrail.shift();
+  }
+
+  const k = `${p.x},${p.y}`;
+  if (dots.has(k)) {
+    dots.delete(k);
+    combo = (tickCount - lastEatTick <= 6) ? combo + 1 : 1;
+    lastEatTick = tickCount;
+    score += combo;
+  } else if (tickCount - lastEatTick > 8) {
+    combo = 0;
+  }
+
+  ai();
+  if (p.x===e.x && p.y===e.y) over = 1;
+  if (dots.size===0) win = 1;
+
+  updateFx();
+  draw();
+}
+
+setInterval(tick, 170);
+draw();
+</script>
+</body>
+</html>
