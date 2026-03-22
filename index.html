@@ -12,7 +12,7 @@
   <h2>Snailman v1 🌀 Fractal Nautilus</h2>
   <canvas id="c" width="560" height="560"></canvas>
   <p id="h"></p>
-  <p>Arrows/WASD to move • R to restart</p>
+  <p>Arrows/WASD to move • Grab green + for 10s invincibility • R to restart</p>
 
 <script>
 const c = document.getElementById('c');
@@ -28,12 +28,24 @@ for (let i=0;i<N;i++) {
 }
 for (let i=3;i<17;i++) if (i!==10) walls.add(`10,${i}`);
 
+// extra wall clusters (Benjamin's design notes)
+for (let x0=4; x0<=7; x0++) walls.add(`${x0},4`);
+for (let y0=6; y0<=9; y0++) walls.add(`6,${y0}`);
+for (let x0=12; x0<=15; x0++) walls.add(`${x0},6`);
+for (let y0=11; y0<=14; y0++) walls.add(`14,${y0}`);
+for (let x0=4; x0<=8; x0++) if (x0!==6) walls.add(`${x0},14`);
+for (let x0=12; x0<=16; x0++) if (x0!==14) walls.add(`${x0},14`);
+
 let p = { x:2, y:2, d:{x:1,y:0} };   // player (snail)
 let e = { x:17, y:17 };              // enemy (salt shaker)
 let score = 0, over = 0, win = 0;
 let combo = 0, tickCount = 0, lastEatTick = -999;
 let slimeTrail = [];     // {x,y,life}
 let saltParticles = [];  // {x,y,vx,vy,life}
+
+let invincibleUntil = 0;
+let powerup = null; // {x,y}
+let nextPowerupTick = 90;
 
 let dots = new Set();
 for (let y=1;y<N-1;y++) {
@@ -151,6 +163,33 @@ function drawSnail(cx, cy) {
   px(ox+20*u, oy+(5+(1-wig))*u, '#0b1020', u);
 }
 
+function spawnPowerup() {
+  if (powerup || over || win) return;
+  const options = [];
+  for (let y=1;y<N-1;y++) {
+    for (let x0=1;x0<N-1;x0++) {
+      const key = `${x0},${y}`;
+      if (!walls.has(key) && !(x0===p.x && y===p.y) && !(x0===e.x && y===e.y)) options.push({x:x0,y});
+    }
+  }
+  if (!options.length) return;
+  powerup = options[(Math.random()*options.length)|0];
+}
+
+function drawPowerup() {
+  if (!powerup) return;
+  const pulse = 0.65 + 0.35 * Math.sin(Date.now()/130);
+  const cx = powerup.x*S + 14;
+  const cy = powerup.y*S + 14;
+  x.fillStyle = `rgba(116,255,141,${pulse.toFixed(3)})`;
+  x.beginPath();
+  x.arc(cx, cy, 7, 0, Math.PI*2);
+  x.fill();
+  x.fillStyle = '#d8ffe0';
+  x.fillRect(cx-1, cy-5, 2, 10);
+  x.fillRect(cx-5, cy-1, 10, 2);
+}
+
 function drawSaltShaker(cx, cy) {
   const t = Math.floor(Date.now() / 180) % 2;
   const u = 2;
@@ -200,13 +239,23 @@ function draw() {
   }
 
   drawFx();
+  drawPowerup();
+  if (Date.now() < invincibleUntil) {
+    const aura = 0.15 + 0.08 * Math.sin(Date.now()/90);
+    x.fillStyle = `rgba(140,255,184,${aura.toFixed(3)})`;
+    x.beginPath();
+    x.arc(p.x*S + 14, p.y*S + 14, 14, 0, Math.PI*2);
+    x.fill();
+  }
   drawSnail(p.x*S, p.y*S);
   drawSaltShaker(e.x*S, e.y*S);
 
   const comboText = combo > 1 ? ` • combo x${combo}` : '';
+  const invLeft = Math.max(0, Math.ceil((invincibleUntil - Date.now())/1000));
+  const invText = invLeft > 0 ? ` • INVINCIBLE ${invLeft}s` : '';
   h.textContent =
     (win ? 'You win! ' : over ? 'Game over! ' : '') +
-    `Score ${score} • left ${dots.size}${comboText}` +
+    `Score ${score} • left ${dots.size}${comboText}${invText}` +
     (win || over ? ' • press R' : '');
 }
 
@@ -215,6 +264,11 @@ function tick() {
   if (over || win) {
     updateFx();
     return draw();
+  }
+
+  if (!powerup && tickCount >= nextPowerupTick) {
+    spawnPowerup();
+    nextPowerupTick = tickCount + 175 + ((Math.random()*90)|0);
   }
 
   const moved = move(p, p.d);
@@ -237,8 +291,28 @@ function tick() {
     combo = 0;
   }
 
+  if (powerup && p.x === powerup.x && p.y === powerup.y) {
+    invincibleUntil = Date.now() + 10000;
+    powerup = null;
+  }
+
   ai();
-  if (p.x===e.x && p.y===e.y) over = 1;
+  if (p.x===e.x && p.y===e.y) {
+    if (Date.now() < invincibleUntil) {
+      score += 8;
+      // respawn enemy away from player
+      const spots = [];
+      for (let y=1;y<N-1;y++) {
+        for (let x0=1;x0<N-1;x0++) {
+          const key = `${x0},${y}`;
+          if (!walls.has(key) && (Math.abs(x0-p.x)+Math.abs(y-p.y) > 8)) spots.push({x:x0,y});
+        }
+      }
+      if (spots.length) e = spots[(Math.random()*spots.length)|0];
+    } else {
+      over = 1;
+    }
+  }
   if (dots.size===0) win = 1;
 
   updateFx();
